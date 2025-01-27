@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Tracking Boxes</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        .tracking-box {
+            position: absolute;
+            border: 2px solid red;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let camera, scene, renderer;
+        let spheres = [];
+        let trackingBoxes = [];
+
+        init();
+        animate();
+
+        function init() {
+            // 初始化場景，添加環境光，添加平行光
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(0, 1, 0);
+            scene.add(directionalLight);
+
+            // 創建球體
+            for (let i = 0; i < 50; i++) {
+                const geometry = new THREE.SphereGeometry(1, 32, 32);
+                const material = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.x = (Math.random() - 0.5) * 20;
+                sphere.position.y = (Math.random() - 0.5) * 30;
+                sphere.position.z = (Math.random() - 0.5) * 20;
+                sphere.userData.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.1,
+                    0,
+                    (Math.random() - 0.5) * 0.1
+                );
+                spheres.push(sphere);
+                scene.add(sphere);
+
+                // 創建跟蹤框
+                const box = document.createElement('div');
+                box.className = 'tracking-box';
+                document.body.appendChild(box);
+                trackingBoxes.push(box);
+            }
+
+            camera.position.z = 30;
+
+            // 添加滑鼠控制
+            let isMouseDown = false;
+            let previousMousePosition = { x: 0, y: 0 };
+
+            document.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                previousMousePosition = {
+                    x: e.clientX,
+                    y: e.clientY
+                };
+            });
+
+            document.addEventListener('mouseup', () => {
+                isMouseDown = false;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+
+                const deltaMove = {
+                    x: e.clientX - previousMousePosition.x,
+                    y: e.clientY - previousMousePosition.y
+                };
+
+                camera.rotation.y += deltaMove.x * 0.005;
+                camera.rotation.x += deltaMove.y * 0.005;
+
+                previousMousePosition = {
+                    x: e.clientX,
+                    y: e.clientY
+                };
+            });
+
+            // 視窗大小調整
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function updateTrackingBoxes() {
+            spheres.forEach((sphere, index) => {
+                // 更新球的位置
+                sphere.position.add(sphere.userData.velocity);
+
+                // 碰撞檢測
+                if (Math.abs(sphere.position.x) > 15) {
+                    sphere.userData.velocity.x *= -1;
+                }
+                if (Math.abs(sphere.position.z) > 15) {
+                    sphere.userData.velocity.z *= -1;
+                }
+
+                // 計算2D屏幕座標
+                const vector = sphere.position.clone();
+                vector.project(camera);
+
+                const widthHalf = window.innerWidth / 2;
+                const heightHalf = window.innerHeight / 2;
+                
+                const x = (vector.x * widthHalf) + widthHalf;
+                const y = -(vector.y * heightHalf) + heightHalf;
+
+                // 計算球在屏幕上的大小
+                const distance = camera.position.distanceTo(sphere.position);
+                const size = (1500 / distance); // 調整這個常數可以改變框的大小
+
+                // 更新跟蹤框位置和大小
+                const box = trackingBoxes[index];
+                box.style.left = (x - size/2) + 'px';
+                box.style.top = (y - size/2) + 'px';
+                box.style.width = size + 'px';
+                box.style.height = size + 'px';
+
+                // 檢查球是否在視野內
+                const behindCamera = vector.z > 1;
+                box.style.display = behindCamera ? 'none' : 'block';
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateTrackingBoxes();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
